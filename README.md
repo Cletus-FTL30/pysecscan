@@ -1,6 +1,6 @@
 # PySecScan
 
-A CLI tool for scanning repositories for accidentally committed secrets — API keys, tokens, and passwords — using regex pattern matching and Shannon entropy analysis.
+A CLI tool for scanning repositories for accidentally committed secrets  API keys, tokens, and passwords using regex pattern matching and Shannon entropy analysis.
 
 ## Features (in progress)
 
