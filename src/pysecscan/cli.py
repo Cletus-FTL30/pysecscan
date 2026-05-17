@@ -19,6 +19,11 @@ def main():
     # or turn it off entirely when they only trust the curated patterns.
     scan.add_argument("--entropy-threshold", type=float, default=DEFAULT_ENTROPY)
     scan.add_argument("--no-entropy", action="store_true")
+    # gitignore is respected by default. real-world repos rely on it to keep
+    # generated junk out, and scanning that junk is just noise.
+    scan.add_argument("--no-gitignore", action="store_true")
+    # extra patterns to skip (same syntax as .gitignore). repeatable.
+    scan.add_argument("--exclude", action="append", default=[], metavar="PATTERN")
 
     args = parser.parse_args()
 
@@ -37,7 +42,11 @@ def main():
         threshold = None if args.no_entropy else args.entropy_threshold
 
         findings = []
-        for f in walk(root):
+        for f in walk(
+            root,
+            respect_gitignore=not args.no_gitignore,
+            extra_excludes=args.exclude,
+        ):
             for hit in scan_file(f, entropy_threshold=threshold):
                 findings.append(hit)
 
