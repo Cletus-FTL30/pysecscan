@@ -3,8 +3,58 @@ import json
 import sys
 from pathlib import Path
 
+from pysecscan import __version__
 from pysecscan.detectors import DEFAULT_ENTROPY, scan_file
 from pysecscan.walker import walk
+
+
+def _to_sarif(findings, root):
+    # SARIF 2.1.0. this is the bare-minimum shape GitHub code-scanning will
+    # accept on upload; locations + ruleId + message are the only fields it
+    # actually surfaces in the UI.
+    def _rel(p):
+        # SARIF URIs are conventionally relative to the run's source root.
+        # fall back to absolute if the path isn't under root for any reason.
+        try:
+            return str(Path(p).resolve().relative_to(Path(root).resolve()))
+        except ValueError:
+            return str(p)
+
+    rules_seen = sorted({h.rule for h in findings})
+    return {
+        "version": "2.1.0",
+        "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+        "runs": [
+            {
+                "tool": {
+                    "driver": {
+                        "name": "pysecscan",
+                        "version": __version__,
+                        "informationUri": "https://github.com/ebukacletus/pysecscan",
+                        "rules": [{"id": r} for r in rules_seen],
+                    }
+                },
+                "results": [
+                    {
+                        "ruleId": h.rule,
+                        # everything we detect is treated as an error. severity
+                        # tiers can come later when rules grow categories.
+                        "level": "error",
+                        "message": {"text": f"{h.rule} match: {h.match}"},
+                        "locations": [
+                            {
+                                "physicalLocation": {
+                                    "artifactLocation": {"uri": _rel(h.path)},
+                                    "region": {"startLine": h.line},
+                                }
+                            }
+                        ],
+                    }
+                    for h in findings
+                ],
+            }
+        ],
+    }
 
 
 def main():
@@ -13,8 +63,9 @@ def main():
 
     scan = sub.add_parser("scan", help="Scan a path for secrets.")
     scan.add_argument("path")
-    # text for humans tailing stdout, json for CI / piping into jq.
-    scan.add_argument("--format", choices=["text", "json"], default="text")
+    # text for humans tailing stdout, json for CI / piping into jq,
+    # sarif for github code-scanning uploads.
+    scan.add_argument("--format", choices=["text", "json", "sarif"], default="text")
     # entropy is noisier than named rules. let users tune it up to cut FPs,
     # or turn it off entirely when they only trust the curated patterns.
     scan.add_argument("--entropy-threshold", type=float, default=DEFAULT_ENTROPY)
@@ -58,6 +109,8 @@ def main():
                 for h in findings
             ]
             print(json.dumps(payload, indent=2))
+        elif args.format == "sarif":
+            print(json.dumps(_to_sarif(findings, root), indent=2))
         else:
             for h in findings:
                 print(f"{h.path}:{h.line}: [{h.rule}] {h.match}")
