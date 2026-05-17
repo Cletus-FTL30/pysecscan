@@ -46,6 +46,9 @@ class Finding:
     line: int
     rule: str
     match: str
+    # set when scanning git history. carries the (short) blob SHA so reports
+    # can distinguish "found in current tree" from "found in old commit".
+    blob: str | None = None
 
 
 def scan_text(path, text, entropy_threshold=DEFAULT_ENTROPY):
