@@ -22,6 +22,8 @@ def main():
     if args.command == "scan":
         root = Path(args.path)
         if not root.exists():
+            # exit 2 for "wrong usage / bad input". keeps it distinct from
+            # exit 1, which we reserve for "scan ran and found something".
             print(f"error: path does not exist: {root}", file=sys.stderr)
             sys.exit(2)
 
@@ -32,6 +34,8 @@ def main():
                 count += 1
 
         print(f"\n{count} finding(s) in {root}")
+        # non-zero on findings so pre-commit hooks and CI fail the build
+        # automatically. that's the whole point of running this in a pipeline.
         sys.exit(1 if count else 0)
 
 
