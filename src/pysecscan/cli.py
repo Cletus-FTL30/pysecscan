@@ -1,4 +1,5 @@
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -12,6 +13,8 @@ def main():
 
     scan = sub.add_parser("scan", help="Scan a path for secrets.")
     scan.add_argument("path")
+    # text for humans tailing stdout, json for CI / piping into jq.
+    scan.add_argument("--format", choices=["text", "json"], default="text")
 
     args = parser.parse_args()
 
@@ -27,16 +30,27 @@ def main():
             print(f"error: path does not exist: {root}", file=sys.stderr)
             sys.exit(2)
 
-        count = 0
+        findings = []
         for f in walk(root):
             for hit in scan_file(f):
-                print(f"{hit.path}:{hit.line}: [{hit.rule}] {hit.match}")
-                count += 1
+                findings.append(hit)
 
-        print(f"\n{count} finding(s) in {root}")
+        if args.format == "json":
+            # buffer everything and dump once so the output is a single valid
+            # JSON document, not a stream of objects. easier to consume.
+            payload = [
+                {"path": str(h.path), "line": h.line, "rule": h.rule, "match": h.match}
+                for h in findings
+            ]
+            print(json.dumps(payload, indent=2))
+        else:
+            for h in findings:
+                print(f"{h.path}:{h.line}: [{h.rule}] {h.match}")
+            print(f"\n{len(findings)} finding(s) in {root}")
+
         # non-zero on findings so pre-commit hooks and CI fail the build
         # automatically. that's the whole point of running this in a pipeline.
-        sys.exit(1 if count else 0)
+        sys.exit(1 if findings else 0)
 
 
 if __name__ == "__main__":
