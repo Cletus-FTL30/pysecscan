@@ -2,6 +2,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from pysecscan.entropy import shannon
+
 # patterns are anchored with \b so we don't match inside longer identifiers.
 # starting with the highest-confidence rules (known prefixes, fixed lengths),
 # which have near-zero false positives. entropy-based generic detection
@@ -31,6 +33,12 @@ RULES = [
     ("jwt", re.compile(r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b")),
 ]
 
+# generic candidate for the entropy pass: a longish run of base64-ish chars.
+# 24 chars is short enough to catch a random 16-byte token (base64 = 24 chars),
+# long enough to skip most identifiers and short hashes.
+CANDIDATE = re.compile(r"[A-Za-z0-9+/=_\-]{24,}")
+DEFAULT_ENTROPY = 4.5
+
 
 @dataclass
 class Finding:
@@ -40,20 +48,34 @@ class Finding:
     match: str
 
 
-def scan_text(path, text):
+def scan_text(path, text, entropy_threshold=DEFAULT_ENTROPY):
     # scan line-by-line so we can report a line number, and so the regex
     # engine never has to backtrack across a giant single string.
     for lineno, line in enumerate(text.splitlines(), 1):
+        # track spans matched by named rules so the entropy pass doesn't
+        # double-report the same string under a generic name.
+        named_spans = []
         for rule, pattern in RULES:
             for m in pattern.finditer(line):
                 yield Finding(path, lineno, rule, m.group(0))
+                named_spans.append((m.start(), m.end()))
+
+        if entropy_threshold is None:
+            continue
+
+        for m in CANDIDATE.finditer(line):
+            if any(s <= m.start() < e or s < m.end() <= e for s, e in named_spans):
+                continue
+            token = m.group(0)
+            if shannon(token) >= entropy_threshold:
+                yield Finding(path, lineno, "high-entropy-string", token)
 
 
-def scan_file(path):
+def scan_file(path, entropy_threshold=DEFAULT_ENTROPY):
     try:
         # errors="replace" so one weirdly-encoded byte doesn't make us drop
         # the whole file. we're looking for ascii-ish secret patterns anyway.
         text = Path(path).read_text(errors="replace")
     except OSError:
         return
-    yield from scan_text(path, text)
+    yield from scan_text(path, text, entropy_threshold=entropy_threshold)

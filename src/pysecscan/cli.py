@@ -3,7 +3,7 @@ import json
 import sys
 from pathlib import Path
 
-from pysecscan.detectors import scan_file
+from pysecscan.detectors import DEFAULT_ENTROPY, scan_file
 from pysecscan.walker import walk
 
 
@@ -15,6 +15,10 @@ def main():
     scan.add_argument("path")
     # text for humans tailing stdout, json for CI / piping into jq.
     scan.add_argument("--format", choices=["text", "json"], default="text")
+    # entropy is noisier than named rules. let users tune it up to cut FPs,
+    # or turn it off entirely when they only trust the curated patterns.
+    scan.add_argument("--entropy-threshold", type=float, default=DEFAULT_ENTROPY)
+    scan.add_argument("--no-entropy", action="store_true")
 
     args = parser.parse_args()
 
@@ -30,9 +34,11 @@ def main():
             print(f"error: path does not exist: {root}", file=sys.stderr)
             sys.exit(2)
 
+        threshold = None if args.no_entropy else args.entropy_threshold
+
         findings = []
         for f in walk(root):
-            for hit in scan_file(f):
+            for hit in scan_file(f, entropy_threshold=threshold):
                 findings.append(hit)
 
         if args.format == "json":
