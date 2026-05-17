@@ -1,0 +1,29 @@
+name: pysecscan
+description: Scan a repository for accidentally committed secrets.
+
+inputs:
+  path:
+    description: Path to scan, relative to the repo root.
+    required: false
+    default: "."
+  format:
+    description: Output format (text, json, sarif).
+    required: false
+    default: "text"
+
+runs:
+  # composite is the lightest way to ship a Python CLI as a GitHub Action:
+  # no Docker image to build, no JS wrapper. assumes the runner already
+  # has Python, which every github-hosted runner does.
+  using: composite
+  steps:
+    - name: Install pysecscan
+      shell: bash
+      # action_path is where GitHub checks out this action's repo, so we
+      # install from there. once we're on PyPI this can become a regular
+      # `pip install pysecscan==<version>`.
+      run: pip install "${{ github.action_path }}"
+
+    - name: Scan
+      shell: bash
+      run: pysecscan scan ${{ inputs.path }} --format ${{ inputs.format }}

@@ -72,3 +72,20 @@ def test_scan_sarif_clean_emits_empty_results(tmp_path: Path):
     assert result.returncode == 0
     doc = json.loads(result.stdout)
     assert doc["runs"][0]["results"] == []
+
+
+def test_scan_accepts_multiple_paths(tmp_path: Path):
+    # this is the pre-commit invocation shape: multiple file paths as
+    # positional args in a single call. findings from any of them should
+    # be reported together.
+    (tmp_path / "a.txt").write_text("aws=AKIAIOSFODNN7EXAMPLE\n")
+    (tmp_path / "b.txt").write_text("clean file\n")
+    (tmp_path / "c.txt").write_text("token=ghp_" + "a" * 36 + "\n")
+
+    result = _run(
+        ["scan", str(tmp_path / "a.txt"), str(tmp_path / "b.txt"), str(tmp_path / "c.txt")],
+        cwd=tmp_path,
+    )
+    assert result.returncode == 1
+    assert "AKIAIOSFODNN7EXAMPLE" in result.stdout
+    assert "ghp_" in result.stdout

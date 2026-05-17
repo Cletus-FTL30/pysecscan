@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -92,7 +93,10 @@ def main():
     sub = parser.add_subparsers(dest="command")
 
     scan = sub.add_parser("scan", help="Scan a path for secrets.")
-    scan.add_argument("path")
+    # nargs="+" means "one or more". required for pre-commit, which calls
+    # us with the list of staged files as positional args. for the normal
+    # case (a single dir), users just pass one path and nothing changes.
+    scan.add_argument("path", nargs="+")
     # text for humans tailing stdout, json for CI / piping into jq,
     # sarif for github code-scanning uploads.
     scan.add_argument("--format", choices=["text", "json", "sarif"], default="text")
@@ -119,25 +123,37 @@ def main():
         return
 
     if args.command == "scan":
-        root = Path(args.path)
-        if not root.exists():
-            # exit 2 for "wrong usage / bad input". keeps it distinct from
-            # exit 1, which we reserve for "scan ran and found something".
-            print(f"error: path does not exist: {root}", file=sys.stderr)
-            sys.exit(2)
+        roots = [Path(p) for p in args.path]
+        for root in roots:
+            if not root.exists():
+                # exit 2 for "wrong usage / bad input". keeps it distinct
+                # from exit 1, which we reserve for "scan ran and found
+                # something".
+                print(f"error: path does not exist: {root}", file=sys.stderr)
+                sys.exit(2)
 
         threshold = None if args.no_entropy else args.entropy_threshold
 
         findings = []
-        for f in walk(
-            root,
-            respect_gitignore=not args.no_gitignore,
-            extra_excludes=args.exclude,
-        ):
-            for hit in scan_file(f, entropy_threshold=threshold):
-                findings.append(hit)
+        for root in roots:
+            for f in walk(
+                root,
+                respect_gitignore=not args.no_gitignore,
+                extra_excludes=args.exclude,
+            ):
+                for hit in scan_file(f, entropy_threshold=threshold):
+                    findings.append(hit)
 
-        _emit(findings, root, args.format)
+        # pick a sensible root to make SARIF URIs relative to. for one path,
+        # use it as-is; for many, take whatever ancestor they share so the
+        # output isn't full of absolute paths.
+        report_root = (
+            roots[0]
+            if len(roots) == 1
+            else Path(os.path.commonpath([str(r.resolve()) for r in roots]))
+        )
+
+        _emit(findings, report_root, args.format)
         # non-zero on findings so pre-commit hooks and CI fail the build
         # automatically. that's the whole point of running this in a pipeline.
         sys.exit(1 if findings else 0)

@@ -1,0 +1,11 @@
+- id: pysecscan
+  name: pysecscan
+  description: Scan staged files for accidentally committed secrets.
+  entry: pysecscan scan
+  language: python
+  # pre-commit passes the list of staged files as positional args; our
+  # CLI handles multi-path scans natively.
+  pass_filenames: true
+  # skip binaries up front so we don't waste time spinning the scanner
+  # on lockfile blobs, images, etc.
+  types: [text]

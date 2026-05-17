@@ -81,6 +81,33 @@ src/config.py:12: [aws-access-key-id] AKIAIOSFODNN7EXAMPLE
 
 `--format json` gives a list of `{path, line, rule, match, blob}` objects. `--format sarif` produces SARIF 2.1.0, which uploads directly to GitHub code scanning.
 
+## Pre-commit hook
+
+Drop this into your `.pre-commit-config.yaml`:
+
+```yaml
+- repo: https://github.com/Cletus-FTL30/pysecscan
+  rev: main
+  hooks:
+    - id: pysecscan
+```
+
+Then `pre-commit install`. From there, any commit that contains a secret in a staged file gets blocked locally before it ever reaches the remote.
+
+## GitHub Action
+
+For CI, add a step to your workflow:
+
+```yaml
+- uses: actions/checkout@v4
+- uses: Cletus-FTL30/pysecscan@main
+  with:
+    path: .
+    format: text
+```
+
+The action exits non-zero when findings are present, which fails the workflow and surfaces the issue on the PR.
+
 ## Development
 
 ```bash
@@ -94,7 +121,7 @@ pytest
 
 ## Roadmap
 
-A pre-commit hook config, a GitHub Action wrapper, and a PyPI release are next.
+PyPI release is next, after which the install step becomes a one-liner.
 
 ## License
 
