@@ -1,5 +1,7 @@
 # pysecscan
 
+[![tests](https://github.com/Cletus-FTL30/pysecscan/actions/workflows/test.yml/badge.svg)](https://github.com/Cletus-FTL30/pysecscan/actions/workflows/test.yml)
+
 A CLI for catching committed secrets in a git repo, before they leak and after they have.
 
 It catches:
